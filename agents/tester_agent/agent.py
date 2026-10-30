@@ -10,6 +10,8 @@ Settings: agents/.env (TESTER_AGENT_SEED, AGENT_MAILBOX, TESTER_PORT).
 
 from __future__ import annotations
 
+
+
 import os
 import re
 import sys
@@ -32,6 +34,7 @@ from uagents_core.contrib.protocols.chat import (  # noqa: E402
     chat_protocol_spec,
 )
 
+from shared.privacy import redact_text
 from shared import memory, sites, team  # noqa: E402
 from tester_agent.shopper import format_report, run  # noqa: E402
 
@@ -75,7 +78,7 @@ def split_request(text: str) -> tuple[str | None, str]:
 
 
 def reply(text: str) -> ChatMessage:
-    return ChatMessage(content=[TextContent(type="text", text=text), EndSessionContent(type="end-session")])
+    return ChatMessage(content=[TextContent(type="text", text=redact_text(text)), EndSessionContent(type="end-session")])
 
 
 PROFILE_README = "tester.md"
@@ -109,7 +112,7 @@ async def handle_chat(ctx: Context, sender: str, msg: ChatMessage):
     if not _allow(sender):
         await ctx.send(sender, reply(f"You've run {TESTS_PER_HOUR} tests in the last hour. Please try again later."))
         return
-    ctx.logger.info(f"Testing {site} for {sender[:16]}…: {task!r}")
+    ctx.logger.info(f"Testing {site} for {sender[:16]}…: [shopping task omitted]")
     try:
         report = await run(site, task)
         text_out = format_report(report)

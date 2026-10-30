@@ -20,6 +20,8 @@ import time
 from dataclasses import asdict, dataclass, field
 from urllib.parse import quote_plus, urlparse
 
+from shared.privacy import redact, redact_text, private_output, cart_fields, safe_url
+
 from . import signals as sig
 from .web import Browser, fresh_get
 
@@ -134,7 +136,10 @@ class Report:
         d = asdict(self)
         d["passed"] = self.passed
         d["total"] = 5
-        return d
+        if self.checkout_url and safe_url(self.checkout_url) != self.checkout_url:
+            d["checkout_url"] = None
+            d["checkout_note"] = "Private checkout link withheld. Open the store directly."
+        return redact(d)
 
 
 # ---------------------------------------------------------------- helpers
@@ -372,7 +377,12 @@ async def step_cart(b: Browser, report: Report, chosen: Product | None) -> str |
         res = await b.post_form(action, form.fields, multipart=form.multipart, referer=chosen.url)
         ev.append(f"Submitted the page's own form: POST {urlparse(action).path or '/'} → HTTP {res.status}")
     elif form:
-        query = "&".join(f"{quote_plus(k)}={quote_plus(v)}" for k, v in form.fields)
+        try:
+            fields = cart_fields(form.fields)
+        except ValueError:
+            report.steps.append(Step("Add to cart", False, "Privacy policy blocked sensitive form submission."))
+            return None
+        query = "&".join(f"{quote_plus(k)}={quote_plus(v)}" for k, v in fields)
         res = await b.get(action + ("&" if "?" in action else "?") + query if query else action)
         ev.append(f"Submitted the page's own form: GET {urlparse(action).path or '/'} → HTTP {res.status}")
     else:
@@ -410,6 +420,9 @@ async def step_checkout(b: Browser, report: Report, chosen: Product | None, cart
         why = f" The cart page says: “{m.group(0).strip()}”." if m else ""
         report.steps.append(Step("Checkout link", False, "The cart page has no checkout link an agent can find." + why))
         return
+    if safe_url(link) != link:
+        report.steps.append(Step("Checkout link", False, "Privacy policy withheld a checkout link containing private parameters. Open the store directly."))
+        return
     # The human opens the link on their own device: no agent cookies.
     human = await fresh_get(link)
     hs = sig.read(human.text)
@@ -433,6 +446,7 @@ async def step_checkout(b: Browser, report: Report, chosen: Product | None, cart
 
 
 async def run(site: str, task_text: str) -> Report:
+    task_text = redact_text(task_text)
     task = parse_task(task_text)
     b = Browser(site)
     report = Report(site=b.origin, task=task_text)
@@ -449,6 +463,7 @@ async def run(site: str, task_text: str) -> Report:
     return report
 
 
+@private_output
 def format_report(r: Report) -> str:
     verdict = "✅ An AI agent can shop here." if r.passed == 5 else "❌ An AI agent cannot complete a purchase here."
     lines = [f"## Agent shopping test: {urlparse(r.site).netloc}", "", f"Task: “{r.task}”", "",
@@ -465,8 +480,11 @@ def format_report(r: Report) -> str:
     return "\n".join(lines)
 
 
+@private_output
 def ready_to_buy(r: Report) -> str:
     """The checkout link, with the chosen product already in the cart: the shopper only has to pay."""
+    if r.checkout_url and safe_url(r.checkout_url) != r.checkout_url:
+        return "Checkout link withheld for privacy. Open the store directly; no order was placed."
     item = r.chosen or {}
     price = f" · ₹{item['price']:,.0f}" if isinstance(item.get("price"), (int, float)) else ""
     name = item.get("name") or "Your product"

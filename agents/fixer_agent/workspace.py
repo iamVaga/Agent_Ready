@@ -16,11 +16,14 @@ import shutil
 import signal
 import socket
 import subprocess
+import threading
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import httpx
+
+from shared.privacy import redact_text
 
 SKIP_DIRS = {".git", "node_modules", ".next", "dist", "build", ".venv", "venv", "__pycache__", ".vercel", "coverage", ".turbo"}
 TEXT_EXT = {".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".json", ".html", ".htm", ".ejs", ".hbs", ".njk", ".css", ".py", ".txt",
@@ -217,10 +220,18 @@ class Server:
         # Tester) drop over plain http on 127.0.0.1. Frameworks like Next.js set it themselves.
         env = child_env()
         env.update({"PORT": str(self.port), "FLASK_DEBUG": "0", "NEXT_TELEMETRY_DISABLED": "1"})
-        log = open(self.log_path, "w", encoding="utf-8")
+
         flags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
-        self.proc = subprocess.Popen(cmd, cwd=app_dir(self.ws, self.stack), stdout=log, stderr=subprocess.STDOUT, env=env,
+        self.proc = subprocess.Popen(cmd, cwd=app_dir(self.ws, self.stack), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env,
+                                     text=True, encoding="utf-8", errors="replace",
                                      creationflags=flags, start_new_session=os.name != "nt")
+        def capture():
+            tail = ""
+            for line in self.proc.stdout:
+                tail = (tail + redact_text(line)).encode("utf-8")[-16000:].decode("utf-8", errors="ignore")
+                self.log_path.write_text(tail, encoding="utf-8")
+        self.log_thread = threading.Thread(target=capture, daemon=True)
+        self.log_thread.start()
         async with httpx.AsyncClient(timeout=5, trust_env=False) as c:
             for _ in range(90):
                 if self.proc.poll() is not None:
@@ -249,3 +260,5 @@ class Server:
                 self.proc.wait(10)
             except subprocess.TimeoutExpired:
                 pass
+        if hasattr(self, "log_thread"):
+            await asyncio.to_thread(self.log_thread.join, 2)

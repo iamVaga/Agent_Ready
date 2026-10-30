@@ -1,3 +1,4 @@
+import { redact } from '../utils/privacy';
 import { ScanDoc } from '../models/Scan';
 import { config } from '../config';
 
@@ -190,6 +191,8 @@ function checkBlock(check: ScanDoc['checks'][number]): string {
 }
 
 export function buildReportHtml(scan: ScanDoc, recipientName?: string): string {
+  scan = redact(scan.toObject ? scan.toObject() : { ...scan }) as ScanDoc;
+  recipientName = recipientName ? 'Visitor' : undefined;
   const gradeColour = GRADE_COLOURS[scan.overallGrade] || '#6b7280';
   const greeting = recipientName ? `Hi ${escapeHtml(recipientName)}, here is` : 'Here is';
 

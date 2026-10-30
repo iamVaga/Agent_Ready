@@ -17,10 +17,12 @@ import re
 import time
 import uuid
 
+from .privacy import redact
+
 log = logging.getLogger("agentready.memory")
 
-TTL_S = 7 * 24 * 3600
-TRANSCRIPT_CAP = 60
+TTL_S = 24 * 3600
+TRANSCRIPT_CAP = 12
 
 _backend = None
 
@@ -31,24 +33,38 @@ class _Local:
     def __init__(self):
         self.kv: dict[str, str] = {}
         self.lists: dict[str, list[str]] = {}
+        self.expires: dict[str, float] = {}
+
+    def _expire(self, key):
+        for expired in [k for k, expiry in self.expires.items() if expiry <= time.time()]:
+            self.kv.pop(expired, None)
+            self.lists.pop(expired, None)
+            self.expires.pop(expired, None)
 
     async def get(self, key):
+        self._expire(key)
         return self.kv.get(key)
 
     async def set(self, key, value):
+        self._expire(key)
         self.kv[key] = value
+        self.expires[key] = time.time() + TTL_S
 
     async def push(self, key, value, cap=0):
+        self._expire(key)
+        self.expires[key] = time.time() + TTL_S
         items = self.lists.setdefault(key, [])
         items.append(value)
         if cap:
             del items[:-cap]
 
     async def pop(self, key):
+        self._expire(key)
         items = self.lists.get(key)
         return items.pop(0) if items else None
 
     async def items(self, key):
+        self._expire(key)
         return list(self.lists.get(key, []))
 
 
@@ -103,37 +119,37 @@ def _store():
 
 async def facts(user: str) -> dict:
     raw = await _store().get(f"facts:{user}")
-    return json.loads(raw) if raw else {}
+    return redact(json.loads(raw)) if raw else {}
 
 
 async def update(user: str, **values) -> dict:
     """Merge values into the user's facts. None values are ignored."""
     current = await facts(user)
     current.update({k: v for k, v in values.items() if v is not None})
-    await _store().set(f"facts:{user}", json.dumps(current))
-    return current
+    await _store().set(f"facts:{user}", json.dumps(redact(current)))
+    return redact(current)
 
 
 async def remember(user: str, agent: str, role: str, text: str):
     """Add a line to the shared transcript. role: user | agent | event."""
     entry = {"t": int(time.time()), "agent": agent, "role": role, "text": text[:600]}
-    await _store().push(f"chat:{user}", json.dumps(entry), cap=TRANSCRIPT_CAP)
+    await _store().push(f"chat:{user}", json.dumps(redact(entry)), cap=TRANSCRIPT_CAP)
 
 
 async def transcript(user: str, n: int = 8) -> list[dict]:
-    return [json.loads(i) for i in (await _store().items(f"chat:{user}"))[-n:]]
+    return [redact(json.loads(i)) for i in (await _store().items(f"chat:{user}"))[-n:]]
 
 
 async def post_task(to: str, kind: str, user: str, **payload) -> str:
     """Hand work to another agent. It picks it up within a few seconds."""
     task = {"id": uuid.uuid4().hex[:8], "kind": kind, "user": user, **payload}
-    await _store().push(f"tasks:{to}", json.dumps(task))
+    await _store().push(f"tasks:{to}", json.dumps(redact(task)))
     return task["id"]
 
 
 async def next_task(me: str) -> dict | None:
     raw = await _store().pop(f"tasks:{me}")
-    return json.loads(raw) if raw else None
+    return redact(json.loads(raw)) if raw else None
 
 
 async def summary(user: str) -> str:

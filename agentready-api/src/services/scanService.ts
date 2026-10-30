@@ -1,3 +1,4 @@
+import { redact } from '../utils/privacy';
 import { config } from '../config';
 import { CheckId, CheckStatus, SiteType } from '../types';
 import { Scan, ScanDoc } from '../models/Scan';
@@ -359,7 +360,7 @@ function auditTrail(scan: ScanDoc): Record<string, unknown> {
   };
 }
 
-export function toFullScan(scan: ScanDoc): Record<string, unknown> {
+function toFullScanInternal(scan: ScanDoc): Record<string, unknown> {
   return {
     scanId: String(scan._id),
     domain: scan.domain,
@@ -398,7 +399,7 @@ export function toFullScan(scan: ScanDoc): Record<string, unknown> {
 }
 
 /** Every check and its verdict, but no explanations and no generated fixes. */
-export function toGatedScan(scan: ScanDoc): Record<string, unknown> {
+function toGatedScanInternal(scan: ScanDoc): Record<string, unknown> {
   return {
     scanId: String(scan._id),
     domain: scan.domain,
@@ -441,7 +442,7 @@ export function toGatedScan(scan: ScanDoc): Record<string, unknown> {
 }
 
 /** Grade, summary and the first two checks — what a visitor sees for free. */
-export function toTeaser(scan: ScanDoc, cached: boolean): Record<string, unknown> {
+function toTeaserInternal(scan: ScanDoc, cached: boolean): Record<string, unknown> {
   return {
     scanId: String(scan._id),
     domain: scan.domain,
@@ -522,3 +523,7 @@ export function toTeaser(scan: ScanDoc, cached: boolean): Record<string, unknown
 export function countFixes(scan: ScanDoc): number {
   return scan.checks.filter((check) => Boolean(check.generatedFix)).length;
 }
+
+export function toFullScan(scan: ScanDoc): Record<string, unknown> { return redact(JSON.parse(JSON.stringify(toFullScanInternal(scan)))); }
+export function toGatedScan(scan: ScanDoc): Record<string, unknown> { return redact(JSON.parse(JSON.stringify(toGatedScanInternal(scan)))); }
+export function toTeaser(scan: ScanDoc, cached = false): Record<string, unknown> { return redact(JSON.parse(JSON.stringify(toTeaserInternal(scan, cached)))); }

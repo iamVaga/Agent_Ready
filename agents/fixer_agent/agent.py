@@ -11,6 +11,8 @@ Settings: agents/.env (FIXER_AGENT_SEED, FIXER_ALLOWED_REPOS, GITHUB_TOKEN, ASI1
 
 from __future__ import annotations
 
+
+
 import asyncio
 import os
 import re
@@ -34,6 +36,7 @@ from uagents_core.contrib.protocols.chat import (  # noqa: E402
 )
 
 from fixer_agent import fixer, github  # noqa: E402
+from shared.privacy import redact_text
 from shared import memory, sites, team  # noqa: E402
 from tester_agent.shopper import format_report, run as shop  # noqa: E402
 
@@ -56,7 +59,7 @@ _busy = asyncio.Lock()   # one store build at a time on this machine
 
 
 def message(text: str, end: bool = True) -> ChatMessage:
-    content = [TextContent(type="text", text=text)]
+    content = [TextContent(type="text", text=redact_text(text))]
     if end:
         content.append(EndSessionContent(type="end-session"))
     return ChatMessage(content=content)
@@ -82,7 +85,7 @@ async def handle_chat(ctx: Context, sender: str, msg: ChatMessage):
     text = " ".join(i.text for i in msg.content if isinstance(i, TextContent)).strip()
     if not text:
         return
-    ctx.logger.info(f"Message from {sender[:16]}…: {text[:120]!r}")
+    ctx.logger.info(f"Message from {sender[:16]}…: [message content omitted]")
     if team.is_chatter(text):
         # Long commentary, typically ASI:One's assistant reacting to our last message. Answering it would start a loop.
         ctx.logger.info(f"Ignoring long message from {sender[:16]}… ({len(text)} chars)")
@@ -323,6 +326,11 @@ def create_agent(mailbox: bool | None = None, port: int | None = None) -> Agent:
 
     @agent.on_interval(period=3.0)
     async def pick_up_team_tasks(ctx: Context):
+        if not _busy.locked():
+            for user, job in list(_jobs.items()):
+                if time.time() - job.created > JOB_TTL_S:
+                    _jobs.pop(user, None)
+                    fixer.cleanup(job)
         await team.pump(ctx, "fixer", {"fix": fix_for_team, "merge": merge_for_team})
 
     return agent

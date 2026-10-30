@@ -154,7 +154,7 @@ export const isUngraded = (scan: { noWebsite: boolean; unreadable: boolean }): b
   scan.noWebsite || scan.unreadable;
 
 export const CONSENT_TEXT =
-  'I agree that Codenix Labs may email me this report and contact me on WhatsApp about fixing what it finds. You can ask us to delete your details at any time.';
+  'I agree to use my email for this report delivery. AgentReady does not retain my contact details or use them for follow-up. The email provider processes my address to deliver the report.';
 
 /** Which form the consent came from, so a second capture point stays distinct. */
 export const CONSENT_SOURCE = 'ai-readiness-gate';

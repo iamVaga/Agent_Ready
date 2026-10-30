@@ -1,3 +1,4 @@
+import { redact } from '../utils/privacy';
 import mongoose, { Document, Schema, Types } from 'mongoose';
 import { AgentAccessRow, CheckId, CheckStatus, Confidence, FixLanguage, Grade, RenderMode, SiteType } from '../types';
 
@@ -134,6 +135,13 @@ const scanSchema = new Schema<ScanDoc>({
 
 // Serves the 6-hour cache lookup: newest scan for a domain.
 scanSchema.index({ domain: 1, scannedAt: -1 });
+
+// Sanitize new records only. Existing records are never deleted or rewritten here.
+scanSchema.pre('validate', function () {
+  if (!this.isNew) return;
+  const clean = redact(this.toObject());
+  this.set(clean);
+});
 
 export const Scan = mongoose.model<ScanDoc>('Scan', scanSchema);
 export default Scan;

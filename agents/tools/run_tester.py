@@ -16,6 +16,8 @@ from pathlib import Path
 sys.stdout.reconfigure(encoding="utf-8")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from shared.privacy import privacy_print as print  # Redact CLI output at the boundary.
+
 from dotenv import load_dotenv  # noqa: E402
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")

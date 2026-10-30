@@ -6,6 +6,9 @@ and from a short timer that picks up tasks other agents have posted.
 
 from __future__ import annotations
 
+from shared.privacy import redact_text
+
+
 import asyncio
 import os
 import re
@@ -123,7 +126,7 @@ async def first_in_a_while(user: str, what: str, seconds: int = QUIET_S) -> bool
 
 def chat_message(text: str, end: bool = True) -> ChatMessage:
     """end=False keeps the chat session open, so later updates still show in the user's conversation."""
-    content = [TextContent(type="text", text=text)]
+    content = [TextContent(type="text", text=redact_text(text))]
     if end:
         content.append(EndSessionContent(type="end-session"))
     return ChatMessage(content=content)

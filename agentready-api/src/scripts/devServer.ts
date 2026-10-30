@@ -1,3 +1,5 @@
+import { installPrivacyLogging } from '../utils/privacy';
+installPrivacyLogging();
 /**
  * Development server with a throwaway database.
  *

@@ -1,3 +1,4 @@
+import { redact, REDACTED } from '../utils/privacy';
 import mongoose, { Document, Schema, Types } from 'mongoose';
 
 export type FollowUpStatus = 'new' | 'contacted' | 'converted' | 'not_interested';
@@ -66,6 +67,14 @@ const leadSchema = new Schema<LeadDoc>({
 });
 
 leadSchema.index({ submittedAt: -1 });
+
+// Sanitize new records only. Existing records are never deleted or rewritten here.
+leadSchema.pre('validate', function () {
+  if (!this.isNew) return;
+  const clean = redact(this.toObject());
+  clean.name = REDACTED; clean.email = REDACTED; clean.whatsapp = '';
+  this.set(clean);
+});
 
 export const Lead = mongoose.model<LeadDoc>('Lead', leadSchema);
 export default Lead;

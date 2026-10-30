@@ -7,6 +7,7 @@
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "dev:memory": "ts-node-dev --respawn --transpile-only src/scripts/devServer.ts",
     "build": "tsc",
+    "test:privacy": "npm run build && node --test tests/privacy.cjs",
     "test:security": "npm run build && node --test tests/safeRequest.cjs",
     "start": "node dist/server.js",
     "check": "ts-node --transpile-only src/scripts/checkFixtures.ts",

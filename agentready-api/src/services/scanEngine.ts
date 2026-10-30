@@ -1,3 +1,4 @@
+import { redact } from '../utils/privacy';
 import { config } from '../config';
 import { CheckId, CheckOutcome, CheckResult, ScanResult, SiteType } from '../types';
 import { Deadline, FetchResult, PROBE_BODY_BYTES, PROBE_TIMEOUT_MS, fetchUrl, fetchWithHttpFallback } from './fetcher';
@@ -52,7 +53,7 @@ export interface ScanOptions {
   siteType?: SiteType;
 }
 
-export async function runScan(submittedUrl: string, options: ScanOptions = {}): Promise<ScanResult> {
+async function runScanInternal(submittedUrl: string, options: ScanOptions = {}): Promise<ScanResult> {
   const startedAt = Date.now();
   const { href, origin, domain } = normalizeUrl(submittedUrl);
   const deadline = new Deadline(config.scanner.totalTimeoutMs);
@@ -833,4 +834,8 @@ function detectSiteName(homepage: HtmlDocument, domain: string): string {
   }
 
   return domain;
+}
+
+export async function runScan(submittedUrl: string, options: ScanOptions = {}): Promise<ScanResult> {
+  return redact(await runScanInternal(submittedUrl, options));
 }

@@ -23,9 +23,9 @@ export const LeadGate: React.FC<{
   busy: boolean;
   error: string | null;
 }> = ({ lockedChecks, fixesAvailable, onSubmit, busy, error }) => {
-  const [name, setName] = useState('');
+  const name = '';
   const [email, setEmail] = useState('');
-  const [whatsapp, setWhatsapp] = useState('');
+  const whatsapp = '';
   const [consent, setConsent] = useState(false);
   const [touched, setTouched] = useState(false);
 
@@ -58,22 +58,12 @@ export const LeadGate: React.FC<{
                 consentText: CONSENT_TEXT,
                 consentSource: CONSENT_SOURCE,
               });
+              setEmail('');
             }
           }}
           className="grid gap-5 mt-8"
         >
-          <div className="grid gap-5 sm:grid-cols-3">
-            <Field id="lead-name" label="Your name (optional)" error={touched ? problems.name : undefined}>
-              <input
-                id="lead-name"
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                autoComplete="name"
-                disabled={busy}
-                className={inputClass}
-              />
-            </Field>
-
+          <div className="grid gap-5 sm:grid-cols-1">
             <Field id="lead-email" label="Email" error={touched ? problems.email : undefined}>
               <input
                 id="lead-email"
@@ -88,23 +78,6 @@ export const LeadGate: React.FC<{
               />
             </Field>
 
-            <Field
-              id="lead-whatsapp"
-              label="Phone Number (optional)"
-              error={touched ? problems.whatsapp : undefined}
-            >
-              <input
-                id="lead-whatsapp"
-                type="tel"
-                inputMode="tel"
-                value={whatsapp}
-                onChange={(event) => setWhatsapp(event.target.value)}
-                autoComplete="tel"
-                placeholder="+91 98765 43210"
-                disabled={busy}
-                className={inputClass}
-              />
-            </Field>
           </div>
 
           <label className="flex items-start gap-3 text-sm cursor-pointer text-neutral-300">
@@ -188,7 +161,7 @@ function validate(lead: LeadFields): Partial<Record<keyof LeadFields, string>> {
     problems.whatsapp = 'That does not look right. Leave it blank if you would rather not.';
   }
 
-  if (!lead.consent) problems.consent = 'Please tick the box so we know we may contact you.';
+  if (!lead.consent) problems.consent = 'Please tick the box to allow report delivery.';
 
   return problems;
 }

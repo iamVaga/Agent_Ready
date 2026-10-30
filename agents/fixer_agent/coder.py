@@ -20,6 +20,8 @@ from typing import Awaitable, Callable
 
 from openai import APIConnectionError, APITimeoutError, AsyncOpenAI, InternalServerError, RateLimitError
 
+from shared.privacy import redact, redact_text
+
 from .playbook import Fix
 from .workspace import Stack, file_tree
 
@@ -33,7 +35,7 @@ TRACE = os.getenv("FIXER_TRACE", "false").lower() == "true"
 def _trace(line: str):
     """With FIXER_TRACE=true, print every model and tool call, to see where the time goes."""
     if TRACE:
-        print(time.strftime("%H:%M:%S"), line, file=sys.stderr, flush=True)
+        print(time.strftime("%H:%M:%S"), redact_text(line), file=sys.stderr, flush=True)
 
 
 PROTECTED = re.compile(r"(^|/)(\.git|\.ssh|\.aws|\.azure|\.config|node_modules|\.venv|\.env[^/]*|package-lock\.json|yarn\.lock|pnpm-lock\.yaml)(/|$)", re.I)
@@ -238,8 +240,8 @@ async def work(session: Session, fixes: list[Fix], report_text: str, extra: str 
                 result = "Error: the arguments were not valid JSON. Try again."
             else:
                 result = await session.call(c.function.name, args)
-            session.log.append(f"{c.function.name}({', '.join(f'{k}={str(v)[:60]!r}' for k, v in args.items() if k != 'content')})")
-            _trace(f"  {session.log[-1]} → {result[:90]!r}")
+            session.log.append(f"tool {c.function.name}")
+            _trace(f"  {session.log[-1]} completed")
             messages.append({"role": "tool", "tool_call_id": c.id, "content": result[:30_000]})
     if not session.summary and session.edits:
         messages.append({"role": "user", "content": "Summarise what you changed and why, as a short bullet list for the pull request."})
@@ -248,6 +250,7 @@ async def work(session: Session, fixes: list[Fix], report_text: str, extra: str 
             session.summary = (resp.choices[0].message.content or "").strip()
         except Exception:
             session.summary = "\n".join(f"- {line}" for line in session.log if line.startswith(("wrote", "edited")))
+    session.summary = redact_text(session.summary)
     return session
 
 
@@ -267,6 +270,7 @@ async def _stream(client: AsyncOpenAI, **kwargs):
 
     Returns the same shape as a non-streamed response: .choices[0].message and .usage.
     """
+    kwargs["messages"] = redact(kwargs.get("messages", []))
     stream = await client.chat.completions.create(model=MODEL, temperature=0.2, max_tokens=16000, stream=True,
                                                   reasoning_effort=REASONING,
                                                   stream_options={"include_usage": True}, **kwargs)

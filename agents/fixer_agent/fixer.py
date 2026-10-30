@@ -24,6 +24,8 @@ from urllib.parse import urljoin, urlparse
 import httpx
 from bs4 import BeautifulSoup
 
+from shared.privacy import private_output, redact_text
+
 from tester_agent.shopper import Report, format_report, run as shop
 
 from . import coder, github, playbook, workspace
@@ -69,6 +71,9 @@ class Result:
 
 
 def _rmtree(p: Path):
+    resolved = p.resolve()
+    if p.is_symlink() or resolved.parent != WORK_DIR.resolve() or not p.name.startswith("job-"):
+        raise ValueError("Refusing cleanup outside managed temporary jobs")
     def onerror(func, path, _):
         os.chmod(path, stat.S_IWRITE)
         func(path)
@@ -80,15 +85,23 @@ async def diagnose(site: str, owner: str, name: str, task: str, progress: Progre
     if not repo.can_push:
         raise github.GitHubError(f"I can read {repo.full} but can't push to it. Give the Fixer write access (add it as a collaborator) and try again.")
     WORK_DIR.mkdir(parents=True, exist_ok=True)
-    ws = WORK_DIR / f"{repo.name}-{int(time.time())}"
+    import uuid
+    ws = WORK_DIR / ("job-" + uuid.uuid4().hex)
     await progress(f"Reading the code of {repo.full} and testing {site} live…")
     clone = asyncio.to_thread(github.clone, repo, ws)
-    live, _ = await asyncio.gather(shop(site, task), clone)
+    tasks = [asyncio.create_task(shop(site, redact_text(task))), asyncio.create_task(clone)]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    failure = next((r for r in results if isinstance(r, BaseException)), None)
+    if failure:
+        if ws.exists(): _rmtree(ws)
+        raise failure
+    live = results[0]
     stack = workspace.detect(ws)
     live_d = live.to_dict()
-    return Job(site, task, repo, ws, stack, live_d, format_report(live), playbook.plan(live_d, stack))
+    return Job(site, redact_text(task), repo, ws, stack, live_d, format_report(live), playbook.plan(live_d, stack))
 
 
+@private_output
 def plan_text(job: Job) -> str:
     lines = [f"## Fix plan for {job.repo.full}", "",
              f"Stack: **{job.stack.label}**. Live shopping test: **{job.live['passed']} / 5 steps**.", ""]
@@ -272,7 +285,7 @@ async def apply(job: Job, fixes: list[Fix], progress: Progress = _quiet, open_pr
         draft = f"My changes didn't improve the shopping test ({before.passed}/5 before, {after.passed}/5 after)."
     shown = after or before
     result = Result(not draft, draft or "", before.to_dict(), after.to_dict() if after else None, files=files,
-                    summary=session.summary, diff=github.diff(ws), draft=bool(draft))
+                    summary=session.summary, diff=redact_text(github.diff(ws)), draft=bool(draft))
     if not open_pr:
         result.message = (draft + " " if draft else "") + "Dry run: changes made and tested locally, no pull request opened."
         return result
@@ -294,6 +307,7 @@ def _row(b, a) -> str:
     return f"| {b.name} | {mark(b)} | {mark(a)} |"
 
 
+@private_output
 def pr_body(job: Job, fixes: list[Fix], before: Report, after: Report, summary: str) -> str:
     rows = "\n".join(_row(b, a) for b, a in zip(before.steps, after.steps))
     picked = "\n".join(f"- **{f.title}**: {f.why}" for f in fixes)
@@ -327,5 +341,10 @@ Please review and test before merging. After it is deployed, ask the Fixer to **
 def cleanup(job: Job):
     try:
         _rmtree(job.ws)
+        log = job.ws.parent / f"{job.ws.name}-server.log"
+        if log.is_file() and not log.is_symlink(): log.unlink()
     except OSError:
         pass
+    job.live.clear()
+    job.live_text = ""
+    job.task = ""
