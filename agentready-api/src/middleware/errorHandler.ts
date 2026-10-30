@@ -1,3 +1,4 @@
+import { privacyLog, safeUrl, redactText } from '../utils/privacy';
 import { NextFunction, Request, Response } from 'express';
 import { InvalidUrlError } from '../utils/url';
 
@@ -9,21 +10,21 @@ export class HttpError extends Error {
 }
 
 export function notFoundHandler(req: Request, res: Response): void {
-  res.status(404).json({ success: false, error: `Route not found: ${req.method} ${req.originalUrl}` });
+  res.status(404).json({ success: false, error: `Route not found: ${req.method} ${safeUrl("https://local.invalid" + req.path, true)}` });
 }
 
 export function errorHandler(error: Error, _req: Request, res: Response, _next: NextFunction): void {
   if (error instanceof InvalidUrlError) {
-    res.status(400).json({ success: false, error: error.message });
+    res.status(400).json({ success: false, error: redactText(error.message) });
     return;
   }
 
   if (error instanceof HttpError) {
-    res.status(error.statusCode).json({ success: false, error: error.message });
+    res.status(error.statusCode).json({ success: false, error: redactText(error.message) });
     return;
   }
 
-  console.error('Unhandled error:', error);
+  privacyLog('Unhandled error:', error);
   res.status(500).json({ success: false, error: 'Something went wrong on our side. Please try again.' });
 }
 

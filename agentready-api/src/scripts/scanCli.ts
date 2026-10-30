@@ -1,3 +1,5 @@
+import { installPrivacyLogging } from '../utils/privacy';
+installPrivacyLogging();
 /**
  * Live scan from the command line, with no database and no server.
  *

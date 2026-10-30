@@ -1,3 +1,5 @@
+import { installPrivacyLogging } from './utils/privacy';
+installPrivacyLogging();
 import { createApp } from './app';
 import { config } from './config';
 import { connectDatabase } from './config/database';

@@ -1,3 +1,5 @@
+import { installPrivacyLogging } from '../utils/privacy';
+installPrivacyLogging();
 /**
  * Why did we classify this site the way we did?
  *

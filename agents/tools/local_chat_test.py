@@ -18,6 +18,9 @@ sys.stdout.reconfigure(encoding="utf-8")  # Windows consoles default to cp1252; 
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "agentready_agent"))
+sys.path.insert(0, str(ROOT))
+
+from shared.privacy import privacy_print as print  # Redact CLI output at the boundary.
 
 from dotenv import load_dotenv  # noqa: E402
 
@@ -31,6 +34,7 @@ args = [a for a in sys.argv[1:] if a != "--tester"]
 
 if use_tester:
     sys.path.insert(0, str(ROOT))
+
     from tester_agent.agent import create_agent  # noqa: E402
 else:
     from agent import create_agent  # noqa: E402

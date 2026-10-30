@@ -1,3 +1,4 @@
+import { redact, installPrivacyLogging } from './utils/privacy';
 import express, { Application } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -6,6 +7,7 @@ import routes from './routes';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 
 export function createApp(): Application {
+  installPrivacyLogging();
   const app = express();
 
   const allowedOrigins = new Set([
@@ -63,6 +65,12 @@ export function createApp(): Application {
   app.use(express.json({ limit: '10kb' }));
   app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 
+  app.use((_req, res, next) => {
+    const json = res.json.bind(res);
+    res.json = (body: unknown) => json(redact(JSON.parse(JSON.stringify(body))));
+    res.setHeader('Cache-Control', 'no-store');
+    next();
+  });
   app.use('/api', routes);
 
   app.get('/', (_req, res) => {

@@ -7,6 +7,8 @@ connects to Agentverse so ASI:One can reach it; with false it stays local.
 
 from __future__ import annotations
 
+
+
 import asyncio
 import os
 import re
@@ -32,6 +34,7 @@ from uagents_core.contrib.protocols.chat import (  # noqa: E402
 )
 
 import brain  # noqa: E402
+from shared.privacy import redact_text
 from shared import memory, team  # noqa: E402
 
 # Our API lets this agent skip its per-IP limit, so the agent limits each
@@ -59,7 +62,7 @@ def _allow(sender: str) -> bool:
 
 
 def text_message(text: str, end_session: bool = True) -> ChatMessage:
-    content = [TextContent(type="text", text=text)]
+    content = [TextContent(type="text", text=redact_text(text))]
     if end_session:
         content.append(EndSessionContent(type="end-session"))
     return ChatMessage(content=content)
@@ -85,7 +88,7 @@ async def handle_chat(ctx: Context, sender: str, msg: ChatMessage):
     if TESTER_ADDRESS and sender == TESTER_ADDRESS:
         return  # a late Tester report: already handled (or timed out) inside ask_tester
 
-    ctx.logger.info(f"Message from {sender[:16]}…: {text[:120]!r}")
+    ctx.logger.info(f"Message from {sender[:16]}…: [message content omitted]")
     if team.is_chatter(text):
         # Long commentary, typically ASI:One's assistant reacting to our last message. Answering it would start a loop.
         ctx.logger.info(f"Ignoring long message from {sender[:16]}… ({len(text)} chars)")

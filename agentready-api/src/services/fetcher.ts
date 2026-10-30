@@ -1,4 +1,5 @@
 import axios, { AxiosError, AxiosResponse } from 'axios';
+import { safeGet } from './safeRequest';
 import { gunzipSync } from 'zlib';
 import { config } from '../config';
 
@@ -268,7 +269,7 @@ async function readCapped(stream: NodeJS.ReadableStream, limit: number): Promise
 function decompressIfGzipped(raw: Buffer): Buffer {
   if (raw.length < 2 || raw[0] !== 0x1f || raw[1] !== 0x8b) return raw;
   try {
-    return gunzipSync(raw);
+    return gunzipSync(raw, { maxOutputLength: MAX_BODY_BYTES });
   } catch {
     // A truncated archive cannot be unwrapped. Returning the raw bytes leaves
     // the caller exactly where it was rather than throwing away the request.
@@ -374,7 +375,7 @@ export async function fetchUrl(url: string, deadline: Deadline, options: FetchOp
   const timeout = Math.min(options.timeoutMs ?? config.scanner.requestTimeoutMs, config.scanner.requestTimeoutMs, deadline.remainingMs());
 
   try {
-    const response = await axios.get<string>(url, {
+    const { response, finalUrl } = await safeGet<string>(url, {
       timeout,
       /**
        * axios's `timeout` starts once the socket is connected, so DNS
@@ -384,7 +385,7 @@ export async function fetchUrl(url: string, deadline: Deadline, options: FetchOp
        * enforces the deadline.
        */
       signal: AbortSignal.timeout(timeout),
-      maxRedirects: 5,
+      maxRedirects: 0,
       /**
        * We police the size ourselves, so axios must not.
        *
@@ -418,7 +419,7 @@ export async function fetchUrl(url: string, deadline: Deadline, options: FetchOp
 
     return {
       ...base,
-      finalUrl: (response.request?.res?.responseUrl as string | undefined) || url,
+      finalUrl,
       status,
       // 206 lands inside this range already — a partial body is exactly what the
       // oversize retry asked for, and every check reads the head of the document.

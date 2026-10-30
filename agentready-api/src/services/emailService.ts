@@ -1,7 +1,7 @@
+import { redact } from '../utils/privacy';
 import { Resend } from 'resend';
 import { config } from '../config';
 import { ScanDoc } from '../models/Scan';
-import { LeadDoc } from '../models/Lead';
 import { buildReportHtml, escapeHtml, reportUrl } from './reportHtml';
 
 /**
@@ -33,12 +33,12 @@ export function emailConfigured(): boolean {
  * shareable page it pointed at is the one someone forwards to their developer,
  * which is a different job from reading it yourself.
  */
-export async function sendReportEmail(scan: ScanDoc, lead: LeadDoc): Promise<void> {
+export async function sendReportEmail(scan: ScanDoc, recipient: string): Promise<void> {
   const response = await resend().emails.send({
     from: config.email.from,
-    to: lead.email,
+    to: recipient,
     subject: `Your site scored ${scan.overallGrade} for AI readiness — ${scan.domain}`,
-    html: buildReportHtml(scan, lead.name),
+    html: buildReportHtml(scan),
   });
 
   if (response.error) {
@@ -50,23 +50,20 @@ export async function sendReportEmail(scan: ScanDoc, lead: LeadDoc): Promise<voi
  * Internal copy of a captured lead. Best-effort: a failure here must never
  * affect the visitor's response, so callers should not await-and-throw on it.
  */
-export async function sendLeadNotification(scan: ScanDoc, lead: LeadDoc): Promise<void> {
+export async function sendLeadNotification(scan: ScanDoc, _lead: unknown): Promise<void> {
   if (!config.email.leadNotify || !emailConfigured()) return;
 
-  const rows = [
-    ['Name', lead.name],
-    ['Email', lead.email],
-    ['WhatsApp', lead.whatsapp],
+  const rows = redact([
     ['Store', scan.domain],
     ['Grade', `${scan.overallGrade} (${scan.overallScore}/100)`],
     ['Failed checks', scan.checks.filter((check) => check.status === 'fail').map((check) => check.title).join(', ') || 'none'],
     ['Report', reportUrl(String(scan._id))],
-  ];
+  ]);
 
   await resend().emails.send({
     from: config.email.from,
     to: config.email.leadNotify,
-    subject: `New AgentReady lead: ${lead.name} — ${scan.domain} (${scan.overallGrade})`,
+    subject: `New AgentReady report — ${scan.domain} (${scan.overallGrade})`,
     html: `<table cellpadding="6" style="font-family:sans-serif;font-size:14px;border-collapse:collapse;">${rows
       .map(
         ([label, value]) =>

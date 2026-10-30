@@ -15,17 +15,21 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+
+from shared.privacy import privacy_print as print  # Redact CLI output at the boundary.
 sys.stdout.reconfigure(encoding="utf-8")
 
 from dotenv import load_dotenv  # noqa: E402
 
 load_dotenv(ROOT / ".env")
 
+from shared.privacy import redact, redact_text
+
 from fixer_agent import fixer, github  # noqa: E402
 
 
 async def say(text: str):
-    print(f"… {text}", flush=True)
+    print(redact_text(f"… {text}"), flush=True)
 
 
 async def main():
@@ -57,8 +61,8 @@ async def main():
         print("Pull request:", res.pr_url)
     out = ROOT / "results" / f"fixer-{name}.json"
     out.parent.mkdir(exist_ok=True)
-    out.write_text(json.dumps({"before": res.before, "after": res.after, "files": res.files, "summary": res.summary,
-                               "pr": res.pr_url, "diff": res.diff}, ensure_ascii=False, indent=1), encoding="utf-8")
+    out.write_text(json.dumps(redact({"before": res.before, "after": res.after, "files": res.files, "summary": res.summary,
+                               "pr": res.pr_url, "diff": res.diff}), ensure_ascii=False, indent=1), encoding="utf-8")
     print("Saved", out, "| working copy:", job.ws)
     if not a.keep:
         fixer.cleanup(job)

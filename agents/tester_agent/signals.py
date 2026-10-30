@@ -7,6 +7,7 @@ import re
 from dataclasses import dataclass, field
 
 from bs4 import BeautifulSoup
+from shared.privacy import scrub_html, redact
 
 PRICE_RE = re.compile(r"(?:₹|Rs\.?\s?|INR\s?)\s*([0-9]{1,3}(?:,[0-9]{2,3})*(?:\.[0-9]{1,2})?|[0-9]+(?:\.[0-9]{1,2})?)", re.I)
 RELATED_RE = re.compile(r"you may also like|you might also like|similar products|related products|more from|customers also|frequently bought", re.I)
@@ -66,12 +67,12 @@ def _walk(node):
 
 
 def read(html: str) -> PageSignals:
-    soup = BeautifulSoup(html or "", "html.parser")
+    soup = BeautifulSoup(scrub_html(html), "html.parser")
     sig = PageSignals()
     sig.script_count = len(soup.find_all("script"))
     for s in soup.find_all("script", type="application/ld+json"):
         try:
-            sig.jsonld.append(json.loads(s.string or s.get_text() or "{}"))
+            sig.jsonld.append(redact(json.loads(s.string or s.get_text() or "{}")))
         except (json.JSONDecodeError, TypeError):
             pass
     md = soup.find("meta", attrs={"name": "description"})

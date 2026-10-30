@@ -19,6 +19,7 @@ import httpx
 from openai import AsyncOpenAI
 
 from shared import sites
+from shared.privacy import redact, redact_text, private_output
 
 log = logging.getLogger("agentready.brain")
 
@@ -76,14 +77,14 @@ async def understand(text: str) -> Intent:
                             'Otherwise use "help".'
                         ),
                     },
-                    {"role": "user", "content": text},
+                    {"role": "user", "content": redact_text(text)},
                 ],
             )
             raw = (r.choices[0].message.content or "").strip()
             if "{" not in raw:
                 continue  # empty or truncated answer: ask once more
             raw = raw[raw.find("{") : raw.rfind("}") + 1]
-            data = json.loads(raw)
+            data = redact(json.loads(raw))
             url = data.get("url") if sites.is_site(data.get("url") or "") else _regex_url(text)
             shopping = (data.get("shopping") or "").strip() or None
             if url:
@@ -165,6 +166,7 @@ def _first_sentence(text: str, limit: int = 220) -> str:
     return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
 
 
+@private_output
 def format_report(scan: dict) -> str:
     domain = scan.get("domain", "your site")
 

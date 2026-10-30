@@ -1,3 +1,4 @@
+import { privacyLog, redact } from '../utils/privacy';
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { Scan, ScanDoc } from '../models/Scan';
@@ -83,8 +84,8 @@ export async function unlockScan(req: Request, res: Response): Promise<void> {
     consent,
     // Stamped server-side. A timestamp the client could set is not evidence.
     consentAt: new Date(),
-    consentText,
-    consentSource,
+    consentText: redact(consentText),
+    consentSource: redact(consentSource),
     submittedAt: new Date(),
     followUpStatus: 'new',
     domain: scan.domain,
@@ -107,11 +108,11 @@ export async function unlockScan(req: Request, res: Response): Promise<void> {
 
   if (emailConfigured()) {
     try {
-      await sendReportEmail(scan, lead);
+      await sendReportEmail(scan, email);
       emailed = true;
-    } catch (error) {
-      emailError = error instanceof Error ? error.message : String(error);
-      console.error(`Report email failed for lead ${lead._id}:`, emailError);
+    } catch {
+      emailError = 'Report delivery failed';
+      privacyLog(`Report email failed for lead ${lead._id}:`, emailError);
     }
   } else {
     emailError = 'RESEND_API_KEY not configured';
@@ -123,7 +124,7 @@ export async function unlockScan(req: Request, res: Response): Promise<void> {
 
   // Internal notification is best-effort and must not delay the response.
   void sendLeadNotification(scan, lead).catch((error) => {
-    console.error('Lead notification failed:', error instanceof Error ? error.message : error);
+    privacyLog('Lead notification failed:', error instanceof Error ? error.message : error);
   });
 
   res.json({
@@ -227,7 +228,7 @@ interface LeadInput {
  * is worse than one with a recorded fallback.
  */
 const DEFAULT_CONSENT_TEXT =
-  'Consent given via the AI Readiness report form; exact wording not supplied by the client.';
+  'Report delivery only. Contact details are used transiently and are not retained by AgentReady.';
 
 function validateLeadInput(body: unknown): LeadInput {
   const source = (body || {}) as Record<string, unknown>;
@@ -271,11 +272,11 @@ function validateLeadInput(body: unknown): LeadInput {
    * is refused at the boundary instead.
    */
   if (source.consent !== true) {
-    throw new HttpError(400, 'Please tick the box so we know we may send you the report and contact you.');
+    throw new HttpError(400, 'Please tick the box to allow report delivery.');
   }
 
-  const consentText = String(source.consentText ?? '').trim().slice(0, 1000) || DEFAULT_CONSENT_TEXT;
-  const consentSource = String(source.consentSource ?? '').trim().slice(0, 120) || 'ai-readiness-gate';
+  const consentText = DEFAULT_CONSENT_TEXT;
+  const consentSource = 'ai-readiness-gate';
 
   // An empty name is recorded as such rather than refused. The email is the
   // part we need; everything else is a courtesy the visitor may decline.
